@@ -19,7 +19,7 @@ added/changed:
 
 ## Install
 
-Copy `pi-bar` to your [extension directory](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md#extension-locations)
+Copy `pi-bar.ts` to your [extension directory](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md#extension-locations)
 or install with `pi install npm:pi-footer-bar`
 
 ## Customization
