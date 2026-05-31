@@ -1,13 +1,13 @@
 {
-  "name": "pi-bar",
-  "version": "0.3.34",
-  "description": "Pi footer/statusline showing active model, thinking level, context pressure, live progress updates, and extension statuses.",
+  "name": "pi-footer-bar",
+  "version": "0.1.0",
+  "description": "An independent fork of pi-bar showing extra metrics and status info in pi's footer.",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi-extension",
     "pi",
-    "pi-bar",
+    "pi-footer-bar",
     "footer",
     "statusline",
     "model",
@@ -19,12 +19,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/tianrendong/pi-bar.git"
+    "url": "https://github.com/sorcerersr/pi-footer-bar.git"
   },
-  "bugs": {
-    "url": "https://github.com/tianrendong/pi-bar/issues"
-  },
-  "homepage": "https://github.com/tianrendong/pi-bar#readme",
+  "homepage": "https://github.com/sorcerersr/pi-footer-bar#readme",
   "files": [
     "assets",
     "extensions",
@@ -49,8 +46,8 @@
   },
   "pi": {
     "extensions": [
-      "./extensions/status-footer.ts"
+      "./extensions/pi-bar.ts"
     ],
-    "image": "https://cdn.jsdelivr.net/npm/pi-bar@0.3.34/assets/screenshot-yellow.png"
+    "image": "https://github.com/sorcerersr/pi-footer-bar/raw/main/assets/screenshot.png"
   }
 }
