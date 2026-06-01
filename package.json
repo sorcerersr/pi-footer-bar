@@ -1,6 +1,6 @@
 {
   "name": "pi-footer-bar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An independent fork of pi-bar showing extra metrics and status info in pi's footer.",
   "type": "module",
   "keywords": [
