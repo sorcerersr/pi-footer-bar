@@ -133,8 +133,7 @@ function serializeSegments(segments: readonly SegmentName[]): SegmentName[] {
 function parseSerializedSegments(value: unknown): SegmentName[] | null {
   if (!Array.isArray(value)) return null;
   const segments = value.filter(
-    (segment): segment is SegmentName =>
-      typeof segment === "string" && isSegmentName(segment),
+    (segment): segment is SegmentName => typeof segment === "string" && isSegmentName(segment),
   );
   return serializeSegments(segments);
 }
@@ -153,10 +152,7 @@ function describeSegments(segments: readonly SegmentName[]): string {
 
 function readGlobalConfig(): GlobalBarConfig {
   try {
-    const data = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<
-      string,
-      unknown
-    >;
+    const data = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as Record<string, unknown>;
     return {
       segments: parseSerializedSegments(data.segments) ?? undefined,
     };
@@ -166,9 +162,7 @@ function readGlobalConfig(): GlobalBarConfig {
 }
 
 function readGlobalSegments(): SegmentName[] {
-  const fromConfig = process.env.PI_BAR_SHOW
-    ? parseSegments()
-    : (readGlobalConfig().segments ?? null);
+  const fromConfig = process.env.PI_BAR_SHOW ? parseSegments() : (readGlobalConfig().segments ?? null);
   // Union with defaults so new default segments (e.g. tokens) are always included
   // even when an older persisted config is present.
   if (fromConfig) {
@@ -191,37 +185,18 @@ function writeGlobalSegments(segments: readonly SegmentName[]): void {
 }
 
 /* HSL → RGB, returns {r, g, b} in [0,255]. */
-function hslToRgb(
-  h: number,
-  s: number,
-  l: number,
-): { r: number; g: number; b: number } {
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
   h = ((h % 360) + 360) % 360;
   const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
   const m = l - c / 2;
-  let r1 = 0,
-    g1 = 0,
-    b1 = 0;
-  if (h < 60) {
-    r1 = c;
-    g1 = x;
-  } else if (h < 120) {
-    r1 = x;
-    g1 = c;
-  } else if (h < 180) {
-    g1 = c;
-    b1 = x;
-  } else if (h < 240) {
-    g1 = x;
-    b1 = c;
-  } else if (h < 300) {
-    r1 = x;
-    b1 = c;
-  } else {
-    r1 = c;
-    g1 = x;
-  }
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (h < 60) { r1 = c; g1 = x; }
+  else if (h < 120) { r1 = x; g1 = c; }
+  else if (h < 180) { g1 = c; b1 = x; }
+  else if (h < 240) { g1 = x; b1 = c; }
+  else if (h < 300) { r1 = x; b1 = c; }
+  else { r1 = c; g1 = x; }
   return {
     r: Math.round((r1 + m) * 255),
     g: Math.round((g1 + m) * 255),
@@ -249,9 +224,7 @@ function contextAnsiColor(percent: number): string {
 // ~4 chars/token is a common average for English; good enough for a live rate display.
 const CHARS_PER_TOKEN = 4;
 
-function estimateTokensFromContent(
-  content: readonly unknown[] | undefined,
-): number {
+function estimateTokensFromContent(content: readonly unknown[] | undefined): number {
   if (!content) return 0;
   let charCount = 0;
   for (const part of content) {
@@ -266,11 +239,7 @@ function estimateTokensFromContent(
       if (record.type === "toolCall") {
         charCount += String(record.name ?? "").length;
         if (record.arguments) {
-          try {
-            charCount += JSON.stringify(record.arguments).length;
-          } catch {
-            /* skip */
-          }
+          try { charCount += JSON.stringify(record.arguments).length; } catch { /* skip */ }
         }
       }
     }
@@ -286,24 +255,18 @@ class TokenRateTracker {
   // Session-level average: total tokens / total streaming time (seconds).
   private _totalTokens = 0;
   private _totalStreamingSeconds = 0;
-  private _turnStartTimestamp = 0;
+  // Per-turn streaming time: accumulated only between token arrivals
+  // (dTokens > 0), so idle gaps and tool-execution time are excluded.
+  private _turnStreamingSeconds = 0;
   // Per-turn deltas for snapshot (appended as session entry at message_end).
   private _turnDeltaTokens = 0;
   private _turnDeltaSeconds = 0;
   private _destroyed = false;
 
-  get isStreaming(): boolean {
-    return this._isStreaming;
-  }
-  get rate(): number {
-    return this.emaRate;
-  }
-  get sum(): number {
-    return this._totalTokens;
-  }
-  get count(): number {
-    return this._totalStreamingSeconds;
-  }
+  get isStreaming(): boolean { return this._isStreaming; }
+  get rate(): number { return this.emaRate; }
+  get sum(): number { return this._totalTokens; }
+  get count(): number { return this._totalStreamingSeconds; }
 
   start(): void {
     if (this._destroyed) return;
@@ -311,16 +274,11 @@ class TokenRateTracker {
     this.lastTokenCount = 0;
     this.lastTimestamp = 0;
     this.emaRate = 0;
-    this._turnStartTimestamp = performance.now();
+    this._turnStreamingSeconds = 0;
   }
 
   record(event: AssistantMessageEvent): void {
-    if (
-      event.type !== "text_delta" &&
-      event.type !== "thinking_delta" &&
-      event.type !== "toolcall_delta"
-    )
-      return;
+    if (event.type !== "text_delta" && event.type !== "thinking_delta" && event.type !== "toolcall_delta") return;
     if (!this._isStreaming) this.start();
     const now = performance.now();
     const usageTokens = event.partial.usage.output ?? 0;
@@ -332,6 +290,8 @@ class TokenRateTracker {
       if (dTokens > 0) {
         const instant = dTokens / dt;
         this.emaRate = 0.15 * instant + 0.85 * this.emaRate;
+        // Accumulate actual elapsed time (no floor) only when tokens arrive.
+        this._turnStreamingSeconds += (now - this.lastTimestamp) / 1000;
       }
     }
     this.lastTimestamp = now;
@@ -341,7 +301,7 @@ class TokenRateTracker {
   stop(): void {
     this._isStreaming = false;
     const turnTokens = this.lastTokenCount;
-    const turnSeconds = (this.lastTimestamp - this._turnStartTimestamp) / 1000;
+    const turnSeconds = this._turnStreamingSeconds;
     if (turnTokens > 0 && turnSeconds > 0) {
       this._totalTokens += turnTokens;
       this._totalStreamingSeconds += turnSeconds;
@@ -387,10 +347,9 @@ export default function (pi: ExtensionAPI) {
   const openSegmentConfigurator = async (ctx: ExtensionContext) => {
     await ctx.ui.custom((tui, theme, _kb, done) => {
       const segmentVisibility = new Map(
-        ALL_SEGMENTS.map((segment): [SegmentName, boolean] => [
-          segment,
-          visibleSegments.includes(segment),
-        ]),
+        ALL_SEGMENTS.map(
+          (segment): [SegmentName, boolean] => [segment, visibleSegments.includes(segment)],
+        ),
       );
       const persistSegmentsFromVisibility = () => {
         setVisibleSegments(
@@ -398,15 +357,13 @@ export default function (pi: ExtensionAPI) {
         );
       };
 
-      const segmentItems: SettingItem[] = ALL_SEGMENTS.map(
-        (segment): SettingItem => ({
-          id: `segment:${segment}`,
-          label: SEGMENT_LABELS[segment],
-          description: "Footer segment visibility",
-          currentValue: segmentVisibility.get(segment) ? "shown" : "hidden",
-          values: ["shown", "hidden"],
-        }),
-      );
+      const segmentItems: SettingItem[] = ALL_SEGMENTS.map((segment): SettingItem => ({
+        id: `segment:${segment}`,
+        label: SEGMENT_LABELS[segment],
+        description: "Footer segment visibility",
+        currentValue: segmentVisibility.get(segment) ? "shown" : "hidden",
+        values: ["shown", "hidden"],
+      }));
 
       const container = new Container();
       container.addChild(
@@ -414,10 +371,7 @@ export default function (pi: ExtensionAPI) {
           render(_width: number) {
             return [
               theme.fg("accent", theme.bold("pi-bar visibility")),
-              theme.fg(
-                "dim",
-                "Footer segments · Enter/Space toggles · Esc closes",
-              ),
+              theme.fg("dim", "Footer segments · Enter/Space toggles · Esc closes"),
               "",
             ];
           }
@@ -461,38 +415,23 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("bar", {
     description: "Configure pi-bar footer visibility",
     handler: async (args, ctx) => {
-      const [section, action, ...rest] = args
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-      if (
-        !section ||
-        section === "config" ||
-        section === "configure" ||
-        section === "edit"
-      ) {
+      const [section, action, ...rest] = args.trim().split(/\s+/).filter(Boolean);
+      if (!section || section === "config" || section === "configure" || section === "edit") {
         await openSegmentConfigurator(ctx);
         return;
       }
       if (section === "list" || section === "ls") {
-        ctx.ui.notify(
-          `pi-bar footer: ${describeSegments(visibleSegments)}`,
-          "info",
-        );
+        ctx.ui.notify(`pi-bar footer: ${describeSegments(visibleSegments)}`, "info");
         return;
       }
 
-      if (
-        section === "segment" ||
-        section === "segments" ||
-        section === "footer"
-      ) {
+      if (section === "segment" || section === "segments" || section === "footer") {
         const segments = splitSegmentNames(rest.join(" "));
-        if (
-          (action === "only" || action === "show" || action === "hide") &&
-          segments.length === 0
-        ) {
-          ctx.ui.notify(`Segments: ${ALL_SEGMENTS.join(", ")}`, "warning");
+        if ((action === "only" || action === "show" || action === "hide") && segments.length === 0) {
+          ctx.ui.notify(
+            `Segments: ${ALL_SEGMENTS.join(", ")}`,
+            "warning",
+          );
           return;
         }
 
@@ -505,10 +444,7 @@ export default function (pi: ExtensionAPI) {
             return;
           case "list":
           case "ls":
-            ctx.ui.notify(
-              `pi-bar footer: ${describeSegments(visibleSegments)}`,
-              "info",
-            );
+            ctx.ui.notify(`pi-bar footer: ${describeSegments(visibleSegments)}`, "info");
             return;
           case "all":
             setVisibleSegments(ALL_SEGMENTS);
@@ -535,10 +471,7 @@ export default function (pi: ExtensionAPI) {
             return;
         }
 
-        ctx.ui.notify(
-          `pi-bar footer: ${describeSegments(visibleSegments)}`,
-          "info",
-        );
+        ctx.ui.notify(`pi-bar footer: ${describeSegments(visibleSegments)}`, "info");
         return;
       }
 
@@ -553,26 +486,19 @@ export default function (pi: ExtensionAPI) {
   pi.on("thinking_level_select", async () => refresh());
   pi.on("turn_end", async () => refresh());
   pi.on("message_start", async (event) => {
-    if (
-      visibleSegments.includes("tokens") &&
-      event.message?.role === "assistant"
-    ) {
+    if (visibleSegments.includes("tokens") && event.message?.role === "assistant") {
       tracker.start();
     }
   });
   pi.on("message_update", async (event) => {
-    if (visibleSegments.includes("tokens"))
-      tracker.record(event.assistantMessageEvent);
+    if (visibleSegments.includes("tokens")) tracker.record(event.assistantMessageEvent);
     refresh();
   });
   pi.on("tool_call", async () => {
     if (visibleSegments.includes("tokens")) tracker.resetTiming();
   });
   pi.on("message_end", async (event) => {
-    if (
-      visibleSegments.includes("tokens") &&
-      event.message?.role === "assistant"
-    ) {
+    if (visibleSegments.includes("tokens") && event.message?.role === "assistant") {
       tracker.stop();
       const snap = tracker.snapshot();
       if (snap.count > 0) {
@@ -618,33 +544,24 @@ export default function (pi: ExtensionAPI) {
           const contextText = usage
             ? `${usage.percent !== null ? `${usage.percent.toFixed(1)}%` : "—%"} / ${formatTokens(usage.contextWindow)}`
             : "—";
-          const contextSegmentText =
-            usage?.percent !== null
-              ? contextAnsiColor(usage.percent) + contextText + "\x1b[0m"
-              : theme.fg("dim", contextText);
+          const contextSegmentText = usage?.percent !== null
+            ? contextAnsiColor(usage.percent) + contextText + "\x1b[0m"
+            : theme.fg("dim", contextText);
 
-          const rawAvgRate =
-            tracker.count > 0 ? tracker.sum / tracker.count : null;
-          const gradientCeiling = Math.max(
-            2,
-            rawAvgRate != null ? rawAvgRate : 20,
-          );
+          const rawAvgRate = tracker.count > 0 ? tracker.sum / tracker.count : null;
+          const gradientCeiling = Math.max(2, rawAvgRate != null ? rawAvgRate : 20);
           const avgRate = rawAvgRate != null ? Math.round(rawAvgRate) : null;
           const avgText = avgRate != null ? `${avgRate} t/s` : `- t/s`;
 
-          const instantRate =
-            tracker.isStreaming && tracker.rate > 0 ? tracker.rate : null;
+          const instantRate = tracker.isStreaming && tracker.rate > 0 ? tracker.rate : null;
           const instantText = tracker.isStreaming
             ? `${Math.round(tracker.rate)} t/s`
             : `- t/s`;
 
           let tokenSegmentText: string;
           if (instantRate != null) {
-            tokenSegmentText =
-              tokenRateAnsiColor(instantRate, gradientCeiling) +
-              instantText +
-              "\x1b[0m" +
-              ` ${theme.fg("muted", "/")} ${theme.fg("muted", avgText)}`;
+            tokenSegmentText = tokenRateAnsiColor(instantRate, gradientCeiling) + instantText + "\x1b[0m"
+              + ` ${theme.fg("muted", "/")} ${theme.fg("muted", avgText)}`;
           } else {
             tokenSegmentText = theme.fg("muted", `${instantText} / ${avgText}`);
           }
@@ -652,10 +569,7 @@ export default function (pi: ExtensionAPI) {
           const segmentRenderers: Record<SegmentName, string | null> = {
             directory: theme.fg("accent", formatCwd(ctx.cwd, homedir())),
             model: theme.fg("accent", modelName),
-            thinking: theme.fg(
-              thinkingColor(thinkingLevel),
-              `think:${thinkingLevel}`,
-            ),
+            thinking: theme.fg(thinkingColor(thinkingLevel), `think:${thinkingLevel}`),
             context: contextSegmentText,
             tokens: tokenSegmentText,
           };
